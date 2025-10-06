@@ -12,13 +12,13 @@ interface EmbedEditorProps {
 
 export const EmbedEditor: React.FC<EmbedEditorProps> = ({ element, onUpdate, onClose }) => {
   const [embedCode, setEmbedCode] = useState(element.content.code || '');
-  const [embedType, setEmbedType] = useState<'iframe' | 'code'>(element.content.type || 'iframe');
+  const [embedType, setEmbedType] = useState<'iframe' | 'code'>(element.content.embedType || 'iframe');
 
   const handleSave = () => {
     onUpdate({
       content: {
         code: embedCode,
-        type: embedType,
+        embedType: embedType,
       },
     });
     onClose();

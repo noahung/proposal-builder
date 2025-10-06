@@ -504,9 +504,9 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
           )}
           {element.type === 'video' && (
             <div className="w-full h-full bg-muted rounded overflow-hidden">
-              {element.content.url ? (
+              {element.content.embedUrl ? (
                 <iframe
-                  src={element.content.url}
+                  src={element.content.embedUrl}
                   className="w-full h-full"
                   frameBorder="0"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"

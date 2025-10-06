@@ -96,9 +96,9 @@ export const ProposalPreview: React.FC<ProposalPreviewProps> = ({ proposalId }) 
       case 'image':
         return (
           <div key={element.id} style={baseStyle} className="overflow-hidden rounded">
-            {element.content.url ? (
+            {element.content.src ? (
               <img
-                src={element.content.url}
+                src={element.content.src}
                 alt={element.content.alt || ''}
                 className="w-full h-full object-cover"
               />
@@ -113,10 +113,13 @@ export const ProposalPreview: React.FC<ProposalPreviewProps> = ({ proposalId }) 
       case 'video':
         return (
           <div key={element.id} style={baseStyle} className="rounded overflow-hidden">
-            {element.content.embedCode ? (
-              <div
+            {element.content.embedUrl ? (
+              <iframe
+                src={element.content.embedUrl}
                 className="w-full h-full"
-                dangerouslySetInnerHTML={{ __html: element.content.embedCode }}
+                frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
               />
             ) : (
               <div className="w-full h-full bg-muted flex items-center justify-center text-muted-foreground">
