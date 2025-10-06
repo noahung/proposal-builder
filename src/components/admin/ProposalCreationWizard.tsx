@@ -5,6 +5,7 @@ import { NeumorphInput } from '../ui/neumorph-input';
 import { Label } from '../ui/label';
 import { useClients, useCreateClient } from '../../hooks/useClients';
 import { useCreateProposal } from '../../hooks/useProposals';
+import { useCreateSection } from '../../hooks/useSections';
 import { LoadingScreen } from '../utility/LoadingScreen';
 
 interface ProposalCreationWizardProps {
@@ -44,6 +45,7 @@ export const ProposalCreationWizard: React.FC<ProposalCreationWizardProps> = ({
   // Mutations
   const createClient = useCreateClient();
   const createProposal = useCreateProposal();
+  const createSection = useCreateSection();
 
   const templates = [
     { id: 'website', name: 'Website Design Proposal', description: 'Perfect for web design and development projects' },
@@ -86,6 +88,15 @@ export const ProposalCreationWizard: React.FC<ProposalCreationWizardProps> = ({
 
         if (proposalResult.data) {
           console.log('Proposal created successfully:', proposalResult.data);
+          
+          // Create initial section
+          await createSection.mutateAsync({
+            proposal_id: proposalResult.data.id,
+            title: 'Cover Page',
+            order_index: 0,
+            elements: [],
+          });
+          
           onComplete(proposalResult.data.id);
         } else {
           throw new Error(proposalResult.error || 'Failed to create proposal');

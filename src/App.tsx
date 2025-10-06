@@ -52,6 +52,7 @@ export default function App() {
   
   const [authScreen, setAuthScreen] = useState<AuthScreen>('landing');
   const [adminScreen, setAdminScreen] = useState<AdminScreen>('dashboard');
+  const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
   const [clientScreen, setClientScreen] = useState<ClientScreen>('landing');
   const [clientTheme, setClientTheme] = useState<ClientTheme>('neumorphic');
   const [showClientDemo, setShowClientDemo] = useState(false); // For demo client view
@@ -95,6 +96,9 @@ export default function App() {
   // Admin handlers
   const handleAdminNavigate = (page: string, id?: string) => {
     setAdminScreen(page as AdminScreen);
+    if (id) {
+      setSelectedResourceId(id);
+    }
   };
 
   const handleLogout = async () => {
@@ -256,8 +260,12 @@ export default function App() {
         case 'proposal-editor':
           return (
             <ProposalEditor
-              onSave={() => console.log('Saving proposal')}
-              onPreview={() => handleAdminNavigate('proposal-preview')}
+              proposalId={selectedResourceId || ''}
+              onSave={() => {
+                console.log('Proposal saved');
+                handleAdminNavigate('proposals');
+              }}
+              onPreview={() => handleAdminNavigate('proposal-preview', selectedResourceId)}
               onBack={() => handleAdminNavigate('proposals')}
             />
           );

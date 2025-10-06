@@ -1,10 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NeumorphCard } from '../ui/neumorph-card';
 import { NeumorphButton } from '../ui/neumorph-button';
 import { NeumorphInput } from '../ui/neumorph-input';
+import { useProposal, useUpdateProposal } from '../../hooks/useProposals';
+import { useSections, useCreateSection, useUpdateSection, useDeleteSection } from '../../hooks/useSections';
+import { LoadingScreen } from '../utility/LoadingScreen';
+import { ErrorScreen } from '../utility/ErrorScreen';
 
 interface ProposalEditorProps {
-  proposalId?: string;
+  proposalId: string;
   onSave: () => void;
   onPreview: () => void;
   onBack: () => void;
@@ -25,56 +29,146 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
   onPreview,
   onBack,
 }) => {
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentSectionId, setCurrentSectionId] = useState<string | null>(null);
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
   const [showToolbar, setShowToolbar] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
-  const [elements, setElements] = useState<EditorElement[]>([
-    {
-      id: '1',
-      type: 'heading',
-      content: { text: 'Website Redesign Project', level: 1 },
-      position: { x: 50, y: 50 },
-      width: 600,
-    },
-    {
-      id: '2',
-      type: 'text',
-      content: { text: 'This proposal outlines our comprehensive approach to redesigning your company website with modern design principles, improved user experience, and enhanced functionality.' },
-      position: { x: 50, y: 120 },
-      width: 600,
-    },
-    {
-      id: '3',
-      type: 'heading',
-      content: { text: 'Project Overview', level: 2 },
-      position: { x: 50, y: 200 },
-      width: 400,
-    },
-    {
-      id: '4',
-      type: 'text',
-      content: { text: 'We will completely redesign your website to reflect your brand identity and improve user engagement. The new design will be responsive, accessible, and optimised for conversions.' },
-      position: { x: 50, y: 250 },
-      width: 600,
-    },
-    {
-      id: '5',
-      type: 'table',
-      content: { 
-        rows: 4, 
-        cols: 3, 
-        data: [
-          ['Service', 'Timeline', 'Investment'],
-          ['Design & UX', '2-3 weeks', '£8,000'],
-          ['Development', '4-5 weeks', '£12,000'],
-          ['Testing & Launch', '1 week', '£3,000']
-        ]
-      },
-      position: { x: 50, y: 350 },
-      width: 500,
-    },
-  ]);
+  // Fetch proposal data
+  const { data: proposal, isLoading: proposalLoading, error: proposalError } = useProposal(proposalId);
+  
+  // Fetch sections
+  const { data: sections, isLoading: sectionsLoading } = useSections(proposalId);
+  
+  // Mutations
+  const updateProposal = useUpdateProposal();
+  const createSection = useCreateSection();
+  const updateSection = useUpdateSection();
+  const deleteSection = useDeleteSection();
+
+  // Set first section as current when sections load
+  useEffect(() => {
+    if (sections && sections.length > 0 && !currentSectionId) {
+      setCurrentSectionId(sections[0].id);
+    }
+  }, [sections, currentSectionId]);
+
+  // Auto-save functionality (every 30 seconds)
+  useEffect(() => {
+    if (!currentSectionId || !sections) return;
+
+    const autoSaveInterval = setInterval(() => {
+      handleAutoSave();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(autoSaveInterval);
+  }, [currentSectionId, sections]);
+
+  const currentSection = sections?.find(s => s.id === currentSectionId);
+  const [elements, setElements] = useState<EditorElement[]>([]);
+
+  // Load elements from current section
+  useEffect(() => {
+    if (currentSection && currentSection.elements) {
+      setElements(currentSection.elements as unknown as EditorElement[]);
+    } else {
+      setElements([]);
+    }
+  }, [currentSection]);
+
+  // Loading and error states
+  if (proposalLoading || sectionsLoading) {
+    return <LoadingScreen />;
+  }
+
+  if (proposalError || !proposal) {
+    return <ErrorScreen message="Failed to load proposal" onRetry={() => window.location.reload()} />;
+  }
+
+  // Auto-save function
+  const handleAutoSave = async () => {
+    if (!currentSectionId || !currentSection) return;
+
+    try {
+      await updateSection.mutateAsync({
+        id: currentSectionId,
+        data: {
+          elements: elements,
+        },
+      });
+      setLastSaved(new Date());
+    } catch (error) {
+      console.error('Auto-save failed:', error);
+    }
+  };
+
+  // Manual save function
+  const handleSave = async () => {
+    if (!currentSectionId || !currentSection) return;
+
+    setIsSaving(true);
+    try {
+      await updateSection.mutateAsync({
+        id: currentSectionId,
+        data: {
+          elements: elements,
+        },
+      });
+      setLastSaved(new Date());
+      alert('Proposal saved successfully!');
+      onSave();
+    } catch (error: any) {
+      alert(`Failed to save proposal: ${error.message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Add new section
+  const handleAddSection = async () => {
+    const nextOrderIndex = sections ? sections.length : 0;
+    try {
+      await createSection.mutateAsync({
+        proposal_id: proposalId,
+        title: `Section ${nextOrderIndex + 1}`,
+        order_index: nextOrderIndex,
+        elements: [],
+      });
+    } catch (error: any) {
+      alert(`Failed to create section: ${error.message}`);
+    }
+  };
+
+  // Delete section
+  const handleDeleteSection = async (sectionId: string) => {
+    if (!confirm('Are you sure you want to delete this section?')) return;
+
+    try {
+      await deleteSection.mutateAsync(sectionId);
+      // Switch to first available section
+      if (sections && sections.length > 1) {
+        const remainingSections = sections.filter(s => s.id !== sectionId);
+        if (remainingSections.length > 0) {
+          setCurrentSectionId(remainingSections[0].id);
+        }
+      }
+    } catch (error: any) {
+      alert(`Failed to delete section: ${error.message}`);
+    }
+  };
+
+  // Update section title
+  const handleUpdateSectionTitle = async (sectionId: string, newTitle: string) => {
+    try {
+      await updateSection.mutateAsync({
+        id: sectionId,
+        data: { title: newTitle },
+      });
+    } catch (error: any) {
+      console.error('Failed to update section title:', error);
+    }
+  };
 
   const toolbarItems = [
     { id: 'text', label: 'Text', icon: '📝' },
@@ -231,16 +325,30 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
           <NeumorphButton onClick={onBack}>
             ← Back
           </NeumorphButton>
-          <h1>Proposal Editor</h1>
+          <div>
+            <h1 className="font-semibold">{proposal.title}</h1>
+            {currentSection && (
+              <p className="text-sm text-muted-foreground">
+                Editing: {currentSection.title}
+              </p>
+            )}
+          </div>
         </div>
         
         <div className="flex items-center gap-4">
-          <span className="text-sm text-muted-foreground">Page {currentPage} of 8</span>
+          {lastSaved && (
+            <span className="text-xs text-muted-foreground">
+              Last saved: {lastSaved.toLocaleTimeString()}
+            </span>
+          )}
+          <span className="text-sm text-muted-foreground">
+            Section {(sections?.findIndex(s => s.id === currentSectionId) ?? -1) + 1} of {sections?.length || 0}
+          </span>
           <NeumorphButton onClick={onPreview}>
             Preview
           </NeumorphButton>
-          <NeumorphButton variant="primary" onClick={onSave}>
-            Save
+          <NeumorphButton variant="primary" onClick={handleSave} disabled={isSaving}>
+            {isSaving ? 'Saving...' : 'Save'}
           </NeumorphButton>
         </div>
       </div>
@@ -296,7 +404,7 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
                           <NeumorphInput
                             type="number"
                             placeholder="Width"
-                            size="sm"
+                            className="text-sm"
                             value={element.width || ''}
                             onChange={(e) => {
                               const newWidth = parseInt(e.target.value) || undefined;
@@ -328,7 +436,7 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
                               <label className="text-xs text-muted-foreground mb-1 block">Rows</label>
                               <NeumorphInput
                                 type="number"
-                                size="sm"
+                                className="text-sm"
                                 min="1"
                                 max="10"
                                 value={element.content.rows}
@@ -346,14 +454,14 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
                               <label className="text-xs text-muted-foreground mb-1 block">Columns</label>
                               <NeumorphInput
                                 type="number"
-                                size="sm"
+                                className="text-sm"
                                 min="1"
                                 max="6"
                                 value={element.content.cols}
                                 onChange={(e) => {
                                   const newCols = parseInt(e.target.value) || 1;
                                   const currentData = element.content.data || [];
-                                  const newData = currentData.map(row => 
+                                  const newData = currentData.map((row: any) =>
                                     Array.from({ length: newCols }, (_, colIndex) => row[colIndex] || '')
                                   );
                                   updateElementContent(element.id, { cols: newCols, data: newData });
@@ -367,7 +475,7 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
                           <label className="text-xs text-muted-foreground mb-1 block">Position X</label>
                           <NeumorphInput
                             type="number"
-                            size="sm"
+                            className="text-sm"
                             value={element.position.x}
                             onChange={(e) => {
                               const newX = parseInt(e.target.value) || 0;
@@ -382,7 +490,7 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
                           <label className="text-xs text-muted-foreground mb-1 block">Position Y</label>
                           <NeumorphInput
                             type="number"
-                            size="sm"
+                            className="text-sm"
                             value={element.position.y}
                             onChange={(e) => {
                               const newY = parseInt(e.target.value) || 0;
@@ -394,9 +502,8 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
                         </div>
                         
                         <NeumorphButton 
-                          size="sm" 
+                          className="w-full mt-4 text-sm" 
                           variant="destructive"
-                          className="w-full mt-4"
                           onClick={() => {
                             setElements(elements.filter(el => el.id !== selectedElement));
                             setSelectedElement(null);
@@ -429,26 +536,35 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
           </div>
         </div>
 
-        {/* Page Navigation */}
+        {/* Sections Navigation */}
         <div className="w-48 p-4 border-l border-border">
           <NeumorphCard>
-            <h3 className="mb-4">Pages</h3>
+            <h3 className="mb-4">Sections</h3>
             <div className="space-y-2">
-              {Array.from({ length: 8 }, (_, i) => (
+              {sections?.map((section, index) => (
                 <button
-                  key={i + 1}
-                  onClick={() => setCurrentPage(i + 1)}
+                  key={section.id}
+                  onClick={() => {
+                    handleAutoSave(); // Save current section before switching
+                    setCurrentSectionId(section.id);
+                  }}
                   className={`w-full text-left p-2 rounded ${
-                    currentPage === i + 1
+                    currentSectionId === section.id
                       ? 'neumorph-inset text-primary'
                       : 'hover:neumorph-card'
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span>Page {i + 1}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {i === 0 ? 'Cover' : `Page ${i + 1}`}
-                    </span>
+                    <span className="text-sm truncate">{section.title}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteSection(section.id);
+                      }}
+                      className="text-xs text-muted-foreground hover:text-destructive ml-2"
+                    >
+                      ×
+                    </button>
                   </div>
                 </button>
               ))}
@@ -457,9 +573,9 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
             <NeumorphButton 
               className="w-full mt-4" 
               size="sm"
-              onClick={() => console.log('Add page')}
+              onClick={handleAddSection}
             >
-              + Add Page
+              + Add Section
             </NeumorphButton>
           </NeumorphCard>
         </div>
