@@ -14,6 +14,7 @@ import { DashboardHome } from './components/admin/DashboardHome';
 import { ProposalsList } from './components/admin/ProposalsList';
 import { ProposalCreationWizard } from './components/admin/ProposalCreationWizard';
 import { ProposalEditor } from './components/admin/ProposalEditor';
+import { ProposalPreview } from './components/admin/ProposalPreview';
 import { ClientManagement } from './components/admin/ClientManagement';
 import { TemplateLibrary } from './components/admin/TemplateLibrary';
 import { ProposalAnalytics } from './components/admin/ProposalAnalytics';
@@ -282,28 +283,22 @@ export default function App() {
         case 'settings':
           return <Settings onNavigate={handleAdminNavigate} />;
         case 'proposal-preview':
+          if (!selectedResourceId) {
+            return <div>No proposal selected</div>;
+          }
           return (
-            <div className="space-y-6">
-              <div className="flex items-center gap-4">
+            <div className="space-y-6 p-6">
+              <div className="flex items-center justify-between">
                 <button
-                  onClick={() => handleAdminNavigate('proposal-editor')}
-                  className="px-4 py-2 neumorph-button rounded-lg"
+                  onClick={() => handleAdminNavigate('proposal-editor', selectedResourceId)}
+                  className="px-4 py-2 neumorph-button rounded-lg flex items-center gap-2"
                 >
                   ← Back to Editor
                 </button>
                 <h1>Proposal Preview</h1>
+                <div className="w-32"></div> {/* Spacer for centering */}
               </div>
-              <div className="text-center py-12">
-                <p className="text-muted-foreground mb-4">
-                  Preview functionality would show the proposal as clients will see it
-                </p>
-                <NeumorphButton
-                  onClick={() => handleAdminNavigate('proposal-send')}
-                  variant="primary"
-                >
-                  Send to Client
-                </NeumorphButton>
-              </div>
+              <ProposalPreview proposalId={selectedResourceId} />
             </div>
           );
         default:

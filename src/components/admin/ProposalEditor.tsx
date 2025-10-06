@@ -1,4 +1,21 @@
 import React, { useState, useEffect } from 'react';
+import { Rnd } from 'react-rnd';
+import {
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+  PieChart,
+  Pie,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+} from 'recharts';
 import { NeumorphCard } from '../ui/neumorph-card';
 import { NeumorphButton } from '../ui/neumorph-button';
 import { NeumorphInput } from '../ui/neumorph-input';
@@ -6,6 +23,13 @@ import { useProposal, useUpdateProposal } from '../../hooks/useProposals';
 import { useSections, useCreateSection, useUpdateSection, useDeleteSection } from '../../hooks/useSections';
 import { LoadingScreen } from '../utility/LoadingScreen';
 import { ErrorScreen } from '../utility/ErrorScreen';
+import { ImageEditor } from '../editor/ImageEditor';
+import { VideoEditor } from '../editor/VideoEditor';
+import { EmbedEditor } from '../editor/EmbedEditor';
+import { ChartEditor } from '../editor/ChartEditor';
+import { TableEditor } from '../editor/TableEditor';
+import { TextEditor } from '../editor/TextEditor';
+import { ShapeEditor } from '../editor/ShapeEditor';
 
 interface ProposalEditorProps {
   proposalId: string;
@@ -16,11 +40,13 @@ interface ProposalEditorProps {
 
 interface EditorElement {
   id: string;
-  type: 'text' | 'heading' | 'image' | 'table' | 'chart' | 'video' | 'embed';
+  type: 'text' | 'heading' | 'image' | 'table' | 'chart' | 'video' | 'embed' | 'shape';
   content: any;
   position: { x: number; y: number };
-  width?: number;
-  height?: number;
+  width: number;
+  height: number;
+  locked?: boolean;
+  zIndex?: number;
 }
 
 export const ProposalEditor: React.FC<ProposalEditorProps> = ({
@@ -31,7 +57,12 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
 }) => {
   const [currentSectionId, setCurrentSectionId] = useState<string | null>(null);
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
+  const [editingElement, setEditingElement] = useState<string | null>(null);
+  const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
+  const [editingSectionTitle, setEditingSectionTitle] = useState('');
   const [showToolbar, setShowToolbar] = useState(true);
+  const [showGrid, setShowGrid] = useState(true);
+  const [zoom, setZoom] = useState(100);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
@@ -54,17 +85,6 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
     }
   }, [sections, currentSectionId]);
 
-  // Auto-save functionality (every 30 seconds)
-  useEffect(() => {
-    if (!currentSectionId || !sections) return;
-
-    const autoSaveInterval = setInterval(() => {
-      handleAutoSave();
-    }, 30000); // 30 seconds
-
-    return () => clearInterval(autoSaveInterval);
-  }, [currentSectionId, sections]);
-
   const currentSection = sections?.find(s => s.id === currentSectionId);
   const [elements, setElements] = useState<EditorElement[]>([]);
 
@@ -76,6 +96,51 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
       setElements([]);
     }
   }, [currentSection]);
+
+  // Auto-save functionality (every 30 seconds)
+  useEffect(() => {
+    if (!currentSectionId || !sections) return;
+
+    const autoSaveInterval = setInterval(() => {
+      handleAutoSave();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(autoSaveInterval);
+  }, [currentSectionId, sections]); // Don't add elements to avoid infinite loop
+
+  // Debounced auto-save on element changes
+  useEffect(() => {
+    if (!currentSectionId || elements.length === 0) return;
+
+    const debounceTimer = setTimeout(() => {
+      handleAutoSave();
+    }, 2000); // 2 seconds after last change
+
+    return () => clearTimeout(debounceTimer);
+  }, [elements]);
+
+  // Keyboard event handler for Delete key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Delete or Backspace key to delete selected element
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedElement) {
+        // Don't delete if user is typing in an input or textarea
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+          return;
+        }
+        
+        e.preventDefault();
+        if (confirm('Delete this element?')) {
+          setElements(elements.filter(el => el.id !== selectedElement));
+          setSelectedElement(null);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedElement, elements]);
 
   // Loading and error states
   if (proposalLoading || sectionsLoading) {
@@ -129,14 +194,19 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
   const handleAddSection = async () => {
     const nextOrderIndex = sections ? sections.length : 0;
     try {
-      await createSection.mutateAsync({
+      const result = await createSection.mutateAsync({
         proposal_id: proposalId,
-        title: `Section ${nextOrderIndex + 1}`,
+        title: `Page ${nextOrderIndex + 1}`,
         order_index: nextOrderIndex,
         elements: [],
       });
+      
+      // Set the newly created section as current
+      if (result.data) {
+        setCurrentSectionId(result.data.id);
+      }
     } catch (error: any) {
-      alert(`Failed to create section: ${error.message}`);
+      alert(`Failed to create page: ${error.message}`);
     }
   };
 
@@ -165,8 +235,12 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
         id: sectionId,
         data: { title: newTitle },
       });
+      // Close editing mode after successful update
+      setEditingSectionId(null);
+      setEditingSectionTitle('');
     } catch (error: any) {
       console.error('Failed to update section title:', error);
+      alert(`Failed to update section title: ${error.message}`);
     }
   };
 
@@ -178,6 +252,7 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
     { id: 'chart', label: 'Chart', icon: '📈' },
     { id: 'video', label: 'Video', icon: '🎥' },
     { id: 'embed', label: 'Embed', icon: '🔗' },
+    { id: 'shape', label: 'Shape', icon: '▭' },
   ];
 
   const formatOptions = [
@@ -190,32 +265,52 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
   ];
 
   const addElement = (type: string) => {
+    const defaultSizes = {
+      text: { width: 400, height: 100 },
+      heading: { width: 500, height: 60 },
+      image: { width: 400, height: 300 },
+      table: { width: 500, height: 300 },
+      chart: { width: 500, height: 350 },
+      video: { width: 560, height: 315 },
+      embed: { width: 500, height: 400 },
+      shape: { width: 300, height: 150 },
+    };
+
+    const size = defaultSizes[type as keyof typeof defaultSizes] || { width: 400, height: 200 };
+
     const newElement: EditorElement = {
       id: Date.now().toString(),
       type: type as any,
       content: getDefaultContent(type),
       position: { x: 50, y: 200 + elements.length * 100 },
+      width: size.width,
+      height: size.height,
+      zIndex: elements.length,
     };
     setElements([...elements, newElement]);
     setSelectedElement(newElement.id);
+    // Auto-open editor for new element
+    setEditingElement(newElement.id);
   };
 
   const getDefaultContent = (type: string) => {
     switch (type) {
       case 'text':
-        return { text: 'Enter your text here...' };
+        return { text: 'Enter your text here...', fontSize: 16, textAlign: 'left', color: '#000000' };
       case 'heading':
         return { text: 'New Heading', level: 2 };
       case 'image':
         return { src: '', alt: 'Image', caption: '' };
       case 'table':
-        return { rows: 3, cols: 3, data: [] };
+        return { rows: 3, cols: 3, data: Array.from({ length: 3 }, () => Array(3).fill('')), hasHeader: true, bordered: true };
       case 'chart':
-        return { type: 'bar', data: [] };
+        return { chartType: 'bar', data: [{ name: 'A', value: 100 }, { name: 'B', value: 200 }], nameKey: 'name', valueKey: 'value', title: '' };
       case 'video':
-        return { url: '', title: 'Video' };
+        return { url: '', title: 'Video', autoplay: false, muted: false, loop: false };
       case 'embed':
-        return { code: '<div>Embedded content</div>' };
+        return { code: '<div>Embedded content</div>', embedType: 'iframe' };
+      case 'shape':
+        return { shapeType: 'divider', color: '#000000', backgroundColor: 'transparent', borderWidth: 2, borderStyle: 'solid', opacity: 100 };
       default:
         return {};
     }
@@ -231,89 +326,302 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
     const isSelected = selectedElement === element.id;
     
     return (
-      <div
+      <Rnd
         key={element.id}
-        className={`absolute cursor-pointer p-2 rounded ${
-          isSelected ? 'ring-2 ring-primary bg-primary/5' : 'hover:bg-muted/20'
-        }`}
-        style={{ 
-          left: element.position.x, 
-          top: element.position.y,
-          width: element.width || 'auto',
-          minWidth: element.width ? element.width : '200px'
+        size={{ width: element.width, height: element.height }}
+        position={{ x: element.position.x, y: element.position.y }}
+        onDragStop={(e, d) => {
+          setElements(elements.map(el =>
+            el.id === element.id ? { ...el, position: { x: d.x, y: d.y } } : el
+          ));
         }}
-        onClick={() => setSelectedElement(element.id)}
+        onResizeStop={(e, direction, ref, delta, position) => {
+          setElements(elements.map(el =>
+            el.id === element.id
+              ? {
+                  ...el,
+                  width: parseInt(ref.style.width),
+                  height: parseInt(ref.style.height),
+                  position,
+                }
+              : el
+          ));
+        }}
+        bounds="parent"
+        enableResizing={!element.locked}
+        disableDragging={element.locked}
+        className={`${isSelected ? 'ring-2 ring-primary' : ''}`}
+        style={{ zIndex: element.zIndex || 0 }}
       >
-        {element.type === 'heading' && (
-          <input
-            type="text"
-            value={element.content.text}
-            onChange={(e) => updateElementContent(element.id, { text: e.target.value })}
-            className={`w-full bg-transparent border-none outline-none ${
-              element.content.level === 1 ? 'text-2xl' : 'text-xl'
-            } font-medium`}
-            placeholder="Enter heading..."
-            onFocus={() => setSelectedElement(element.id)}
-          />
-        )}
-        {element.type === 'text' && (
-          <textarea
-            value={element.content.text}
-            onChange={(e) => updateElementContent(element.id, { text: e.target.value })}
-            className="w-full bg-transparent border-none outline-none text-base resize-none"
-            placeholder="Enter text..."
-            rows={Math.max(2, Math.ceil(element.content.text.length / 60))}
-            onFocus={() => setSelectedElement(element.id)}
-          />
-        )}
-        {element.type === 'image' && (
-          <div className="w-full h-32 bg-muted rounded flex items-center justify-center">
-            <span className="text-muted-foreground">🖼️ Image Placeholder</span>
-          </div>
-        )}
-        {element.type === 'table' && (
-          <div className="border border-border rounded overflow-hidden">
-            <table className="w-full">
-              <tbody>
-                {element.content.data?.map((row: string[], rowIndex: number) => (
-                  <tr key={rowIndex}>
-                    {row.map((cell: string, colIndex: number) => (
-                      <td key={colIndex} className="border border-border p-2 text-sm">
-                        <input
-                          type="text"
-                          value={cell}
-                          onChange={(e) => {
-                            const newData = [...element.content.data];
-                            newData[rowIndex][colIndex] = e.target.value;
-                            updateElementContent(element.id, { data: newData });
-                          }}
-                          className="w-full bg-transparent border-none outline-none"
-                          placeholder={rowIndex === 0 ? "Header" : "Data"}
+        <div
+          className={`w-full h-full p-2 rounded cursor-move ${
+            isSelected ? 'bg-primary/5' : 'hover:bg-muted/20'
+          } ${element.locked ? 'cursor-not-allowed' : ''}`}
+          onClick={() => setSelectedElement(element.id)}
+          onDoubleClick={() => setEditingElement(element.id)}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setSelectedElement(element.id);
+            
+            // Show context menu options
+            const shouldDelete = window.confirm('Delete this element?');
+            if (shouldDelete) {
+              setElements(elements.filter(el => el.id !== element.id));
+              setSelectedElement(null);
+            }
+          }}
+        >
+          {element.type === 'heading' && (
+            <div
+              className={`w-full h-full ${
+                element.content.level === 1 ? 'text-3xl' : element.content.level === 2 ? 'text-2xl' : 'text-xl'
+              } font-semibold overflow-hidden flex items-center`}
+            >
+              {element.content.text}
+            </div>
+          )}
+          {element.type === 'text' && (
+            <div
+              className="w-full h-full overflow-auto"
+              style={{
+                fontSize: `${element.content.fontSize || 16}px`,
+                textAlign: element.content.textAlign || 'left',
+                color: element.content.color || '#000000',
+              }}
+              dangerouslySetInnerHTML={{ __html: element.content.text || 'Double-click to edit text' }}
+            />
+          )}
+          {element.type === 'image' && (
+            <div className="w-full h-full bg-muted rounded flex items-center justify-center overflow-hidden">
+              {element.content.src ? (
+                <img src={element.content.src} alt={element.content.alt} className="max-w-full max-h-full object-contain" />
+              ) : (
+                <span className="text-muted-foreground">🖼️ Double-click to add image</span>
+              )}
+            </div>
+          )}
+          {element.type === 'table' && (
+            <div className="w-full h-full overflow-auto border border-border rounded bg-white">
+              <table className={`w-full ${element.content.bordered ? 'border-collapse' : ''}`}>
+                <tbody>
+                  {element.content.data?.map((row: string[], rowIndex: number) => (
+                    <tr
+                      key={rowIndex}
+                      className={`${element.content.striped && rowIndex % 2 === 1 ? 'bg-muted/30' : ''}`}
+                    >
+                      {row.map((cell: string, colIndex: number) => (
+                        <td
+                          key={colIndex}
+                          className={`${element.content.bordered ? 'border border-border' : ''} p-2 text-sm ${
+                            element.content.hasHeader && rowIndex === 0 ? 'font-semibold' : ''
+                          }`}
+                        >
+                          {cell || '-'}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {element.type === 'chart' && (
+            <div className="w-full h-full bg-white rounded p-2 overflow-hidden">
+              {element.content.data && element.content.data.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  {(() => {
+                    const { chartType, data, nameKey, valueKey, title } = element.content;
+                    const commonProps = {
+                      data,
+                      margin: { top: title ? 30 : 10, right: 10, left: 0, bottom: 5 },
+                    };
+
+                    switch (chartType) {
+                      case 'bar':
+                        return (
+                          <BarChart {...commonProps}>
+                            {title && <text x="50%" y="15" textAnchor="middle" className="text-sm font-semibold">{title}</text>}
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey={nameKey || 'name'} tick={{ fontSize: 10 }} />
+                            <YAxis tick={{ fontSize: 10 }} />
+                            <Tooltip />
+                            <Bar dataKey={valueKey || 'value'} fill="#8884d8" />
+                          </BarChart>
+                        );
+                      case 'line':
+                        return (
+                          <LineChart {...commonProps}>
+                            {title && <text x="50%" y="15" textAnchor="middle" className="text-sm font-semibold">{title}</text>}
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey={nameKey || 'name'} tick={{ fontSize: 10 }} />
+                            <YAxis tick={{ fontSize: 10 }} />
+                            <Tooltip />
+                            <Line type="monotone" dataKey={valueKey || 'value'} stroke="#8884d8" />
+                          </LineChart>
+                        );
+                      case 'pie':
+                        return (
+                          <PieChart>
+                            {title && <text x="50%" y="15" textAnchor="middle" className="text-sm font-semibold">{title}</text>}
+                            <Pie
+                              data={data}
+                              dataKey={valueKey || 'value'}
+                              nameKey={nameKey || 'name'}
+                              cx="50%"
+                              cy="50%"
+                              outerRadius={60}
+                              label
+                            >
+                              {data.map((entry: any, index: number) => (
+                                <Cell key={`cell-${index}`} fill={['#8884d8', '#82ca9d', '#ffc658', '#ff7c7c', '#8dd1e1', '#d084d0'][index % 6]} />
+                              ))}
+                            </Pie>
+                            <Tooltip />
+                          </PieChart>
+                        );
+                      case 'area':
+                        return (
+                          <AreaChart {...commonProps}>
+                            {title && <text x="50%" y="15" textAnchor="middle" className="text-sm font-semibold">{title}</text>}
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey={nameKey || 'name'} tick={{ fontSize: 10 }} />
+                            <YAxis tick={{ fontSize: 10 }} />
+                            <Tooltip />
+                            <Area type="monotone" dataKey={valueKey || 'value'} stroke="#8884d8" fill="#8884d8" />
+                          </AreaChart>
+                        );
+                      default:
+                        return <div className="flex items-center justify-center h-full text-muted-foreground text-sm">Invalid chart type</div>;
+                    }
+                  })()}
+                </ResponsiveContainer>
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <span className="text-muted-foreground text-sm">📈 Double-click to add chart data</span>
+                </div>
+              )}
+            </div>
+          )}
+          {element.type === 'video' && (
+            <div className="w-full h-full bg-muted rounded overflow-hidden">
+              {element.content.url ? (
+                <iframe
+                  src={element.content.url}
+                  className="w-full h-full"
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <span className="text-muted-foreground">🎥 Double-click to add video</span>
+                </div>
+              )}
+            </div>
+          )}
+          {element.type === 'embed' && (
+            <div className="w-full h-full overflow-hidden">
+              {element.content.embedType === 'iframe' ? (
+                element.content.code ? (
+                  <iframe src={element.content.code} className="w-full h-full" frameBorder="0" />
+                ) : (
+                  <div className="w-full h-full bg-muted rounded flex items-center justify-center">
+                    <span className="text-muted-foreground">� Double-click to add embed</span>
+                  </div>
+                )
+              ) : (
+                element.content.code ? (
+                  <div dangerouslySetInnerHTML={{ __html: element.content.code }} className="w-full h-full" />
+                ) : (
+                  <div className="w-full h-full bg-muted rounded flex items-center justify-center">
+                    <span className="text-muted-foreground">🔗 Double-click to add embed</span>
+                  </div>
+                )
+              )}
+            </div>
+          )}
+          {element.type === 'shape' && (
+            <div className="w-full h-full flex items-center justify-center">
+              {(() => {
+                const { shapeType, color, backgroundColor, borderWidth, borderStyle, opacity } = element.content;
+                const baseStyle: React.CSSProperties = {
+                  borderColor: color,
+                  borderWidth: `${borderWidth}px`,
+                  borderStyle: borderStyle,
+                  opacity: opacity / 100,
+                };
+
+                switch (shapeType) {
+                  case 'line':
+                  case 'divider':
+                    return (
+                      <div
+                        style={{
+                          width: '100%',
+                          height: '0',
+                          borderTop: `${borderWidth}px ${borderStyle} ${color}`,
+                          opacity: opacity / 100,
+                        }}
+                      />
+                    );
+                  case 'rectangle':
+                    return (
+                      <div
+                        style={{
+                          ...baseStyle,
+                          width: '100%',
+                          height: '100%',
+                          backgroundColor: backgroundColor,
+                        }}
+                      />
+                    );
+                  case 'circle':
+                    return (
+                      <div
+                        style={{
+                          ...baseStyle,
+                          width: '100%',
+                          height: '100%',
+                          borderRadius: '50%',
+                          backgroundColor: backgroundColor,
+                        }}
+                      />
+                    );
+                  case 'arrow':
+                    return (
+                      <svg width="100%" height="100%" viewBox="0 0 200 40" preserveAspectRatio="none">
+                        <defs>
+                          <marker
+                            id={`arrowhead-${element.id}`}
+                            markerWidth="10"
+                            markerHeight="10"
+                            refX="9"
+                            refY="3"
+                            orient="auto"
+                          >
+                            <polygon points="0 0, 10 3, 0 6" fill={color} opacity={opacity / 100} />
+                          </marker>
+                        </defs>
+                        <line
+                          x1="0"
+                          y1="20"
+                          x2="190"
+                          y2="20"
+                          stroke={color}
+                          strokeWidth={borderWidth}
+                          markerEnd={`url(#arrowhead-${element.id})`}
+                          opacity={opacity / 100}
                         />
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {element.type === 'chart' && (
-          <div className="w-full h-32 bg-muted rounded flex items-center justify-center">
-            <span className="text-muted-foreground">📈 Chart Placeholder</span>
-          </div>
-        )}
-        {element.type === 'video' && (
-          <div className="w-full h-32 bg-muted rounded flex items-center justify-center">
-            <span className="text-muted-foreground">🎥 Video Placeholder</span>
-          </div>
-        )}
-        {element.type === 'embed' && (
-          <div className="w-full h-32 bg-muted rounded flex items-center justify-center">
-            <span className="text-muted-foreground">🔗 Embedded Content</span>
-          </div>
-        )}
-      </div>
+                      </svg>
+                    );
+                  default:
+                    return <span className="text-muted-foreground">Shape</span>;
+                }
+              })()}
+            </div>
+          )}
+        </div>
+      </Rnd>
     );
   };
 
@@ -344,9 +652,6 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
           <span className="text-sm text-muted-foreground">
             Section {(sections?.findIndex(s => s.id === currentSectionId) ?? -1) + 1} of {sections?.length || 0}
           </span>
-          <NeumorphButton onClick={onPreview}>
-            Preview
-          </NeumorphButton>
           <NeumorphButton variant="primary" onClick={handleSave} disabled={isSaving}>
             {isSaving ? 'Saving...' : 'Save'}
           </NeumorphButton>
@@ -405,9 +710,9 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
                             type="number"
                             placeholder="Width"
                             className="text-sm"
-                            value={element.width || ''}
+                            value={element.width}
                             onChange={(e) => {
-                              const newWidth = parseInt(e.target.value) || undefined;
+                              const newWidth = parseInt(e.target.value) || 100;
                               setElements(elements.map(el => 
                                 el.id === selectedElement ? { ...el, width: newWidth } : el
                               ));
@@ -522,7 +827,92 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
 
         {/* Canvas */}
         <div className="flex-1 relative bg-white m-4 rounded-lg overflow-auto" style={{ minHeight: '800px' }}>
-          <div className="relative w-full h-full p-8">
+          {/* Canvas Controls */}
+          <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
+            <NeumorphButton
+              size="sm"
+              variant={showGrid ? 'primary' : 'default'}
+              onClick={() => setShowGrid(!showGrid)}
+              title="Toggle Grid"
+            >
+              ⊞
+            </NeumorphButton>
+            <div className="flex items-center gap-2 neumorph-card px-2 py-1">
+              <button
+                onClick={() => setZoom(Math.max(25, zoom - 25))}
+                className="px-2 py-1 hover:text-primary"
+              >
+                −
+              </button>
+              <span className="text-sm min-w-[3rem] text-center">{zoom}%</span>
+              <button
+                onClick={() => setZoom(Math.min(200, zoom + 25))}
+                className="px-2 py-1 hover:text-primary"
+              >
+                +
+              </button>
+            </div>
+            {selectedElement && (
+              <>
+                <NeumorphButton
+                  size="sm"
+                  onClick={() => {
+                    const element = elements.find(el => el.id === selectedElement);
+                    if (element) {
+                      setElements(elements.map(el =>
+                        el.id === selectedElement ? { ...el, locked: !el.locked } : el
+                      ));
+                    }
+                  }}
+                  title="Lock/Unlock Element"
+                >
+                  {elements.find(el => el.id === selectedElement)?.locked ? '🔒' : '🔓'}
+                </NeumorphButton>
+                <NeumorphButton
+                  size="sm"
+                  onClick={() => {
+                    const element = elements.find(el => el.id === selectedElement);
+                    if (element) {
+                      const newElement = {
+                        ...element,
+                        id: Date.now().toString(),
+                        position: { x: element.position.x + 20, y: element.position.y + 20 },
+                      };
+                      setElements([...elements, newElement]);
+                    }
+                  }}
+                  title="Duplicate Element"
+                >
+                  📋
+                </NeumorphButton>
+                <NeumorphButton
+                  size="sm"
+                  onClick={() => {
+                    if (confirm('Delete this element?')) {
+                      setElements(elements.filter(el => el.id !== selectedElement));
+                      setSelectedElement(null);
+                    }
+                  }}
+                  title="Delete Element"
+                  className="text-destructive"
+                >
+                  🗑️
+                </NeumorphButton>
+              </>
+            )}
+          </div>
+
+          <div
+            className="relative w-full h-full p-8"
+            style={{
+              transform: `scale(${zoom / 100})`,
+              transformOrigin: 'top left',
+              backgroundImage: showGrid
+                ? 'linear-gradient(to right, #e5e7eb 1px, transparent 1px), linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)'
+                : undefined,
+              backgroundSize: showGrid ? '20px 20px' : undefined,
+            }}
+          >
             {elements.map(renderElement)}
             
             {elements.length === 0 && (
@@ -537,36 +927,85 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
         </div>
 
         {/* Sections Navigation */}
-        <div className="w-48 p-4 border-l border-border">
-          <NeumorphCard>
-            <h3 className="mb-4">Sections</h3>
-            <div className="space-y-2">
+        <div className="w-64 p-4 border-l border-border flex flex-col">
+          <NeumorphCard className="flex-1 flex flex-col">
+            <h3 className="mb-4 font-semibold">Sections</h3>
+            <div className="space-y-2 flex-1 overflow-y-auto">
               {sections?.map((section, index) => (
-                <button
+                <div
                   key={section.id}
-                  onClick={() => {
-                    handleAutoSave(); // Save current section before switching
-                    setCurrentSectionId(section.id);
-                  }}
-                  className={`w-full text-left p-2 rounded ${
+                  className={`rounded ${
                     currentSectionId === section.id
-                      ? 'neumorph-inset text-primary'
-                      : 'hover:neumorph-card'
+                      ? 'neumorph-inset'
+                      : ''
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm truncate">{section.title}</span>
+                  {editingSectionId === section.id ? (
+                    <div className="p-2">
+                      <input
+                        type="text"
+                        value={editingSectionTitle}
+                        onChange={(e) => setEditingSectionTitle(e.target.value)}
+                        onBlur={async () => {
+                          if (editingSectionTitle.trim() && editingSectionTitle !== section.title) {
+                            await handleUpdateSectionTitle(section.id, editingSectionTitle);
+                          } else {
+                            setEditingSectionId(null);
+                          }
+                        }}
+                        onKeyDown={async (e) => {
+                          if (e.key === 'Enter') {
+                            if (editingSectionTitle.trim() && editingSectionTitle !== section.title) {
+                              await handleUpdateSectionTitle(section.id, editingSectionTitle);
+                            } else {
+                              setEditingSectionId(null);
+                            }
+                          } else if (e.key === 'Escape') {
+                            setEditingSectionId(null);
+                            setEditingSectionTitle(section.title);
+                          }
+                        }}
+                        autoFocus
+                        className="w-full px-2 py-1 text-sm border border-primary rounded"
+                      />
+                    </div>
+                  ) : (
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteSection(section.id);
+                      onClick={() => {
+                        handleAutoSave();
+                        setCurrentSectionId(section.id);
                       }}
-                      className="text-xs text-muted-foreground hover:text-destructive ml-2"
+                      className="w-full text-left p-2 hover:bg-muted/20 rounded transition-colors"
                     >
-                      ×
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm truncate flex-1">{section.title}</span>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingSectionId(section.id);
+                              setEditingSectionTitle(section.title);
+                            }}
+                            className="text-xs text-muted-foreground hover:text-primary p-1"
+                            title="Rename section"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteSection(section.id);
+                            }}
+                            className="text-xs text-muted-foreground hover:text-destructive p-1"
+                            title="Delete section"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
                     </button>
-                  </div>
-                </button>
+                  )}
+                </div>
               ))}
             </div>
             
@@ -575,11 +1014,53 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
               size="sm"
               onClick={handleAddSection}
             >
-              + Add Section
+              + Add Page
+            </NeumorphButton>
+
+            {/* Preview Button at Bottom */}
+            <NeumorphButton
+              className="w-full mt-6"
+              variant="primary"
+              onClick={onPreview}
+            >
+              🎭 View as Client
             </NeumorphButton>
           </NeumorphCard>
         </div>
       </div>
+
+      {/* Modal Editors */}
+      {editingElement && (() => {
+        const element = elements.find(el => el.id === editingElement);
+        if (!element) return null;
+
+        const handleUpdate = (updates: any) => {
+          setElements(elements.map(el => 
+            el.id === editingElement ? { ...el, ...updates } : el
+          ));
+        };
+
+        const handleClose = () => setEditingElement(null);
+
+        switch (element.type) {
+          case 'image':
+            return <ImageEditor element={element} onUpdate={handleUpdate} onClose={handleClose} />;
+          case 'video':
+            return <VideoEditor element={element} onUpdate={handleUpdate} onClose={handleClose} />;
+          case 'embed':
+            return <EmbedEditor element={element} onUpdate={handleUpdate} onClose={handleClose} />;
+          case 'chart':
+            return <ChartEditor element={element} onUpdate={handleUpdate} onClose={handleClose} />;
+          case 'table':
+            return <TableEditor element={element} onUpdate={handleUpdate} onClose={handleClose} />;
+          case 'text':
+            return <TextEditor element={element} onUpdate={handleUpdate} onClose={handleClose} />;
+          case 'shape':
+            return <ShapeEditor element={element} onUpdate={handleUpdate} onClose={handleClose} />;
+          default:
+            return null;
+        }
+      })()}
     </div>
   );
 };
