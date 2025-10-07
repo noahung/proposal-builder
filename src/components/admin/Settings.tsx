@@ -1,23 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NeumorphCard } from '../ui/neumorph-card';
 import { NeumorphButton } from '../ui/neumorph-button';
 import { NeumorphInput } from '../ui/neumorph-input';
 import { Switch } from '../ui/switch';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface SettingsProps {
   onNavigate: (page: string) => void;
 }
 
 export const Settings: React.FC<SettingsProps> = ({ onNavigate }) => {
+  const { profile, agency, updateProfile } = useAuth();
   const [activeTab, setActiveTab] = useState('account');
+  const [isSaving, setIsSaving] = useState(false);
   const [settings, setSettings] = useState({
     // Account Settings
-    firstName: 'John',
-    lastName: 'Smith',
-    email: 'john.smith@proposalcraft.com',
-    company: 'ProposalCraft Agency',
-    jobTitle: 'Creative Director',
-    phone: '+44 20 7123 4567',
+    firstName: '',
+    lastName: '',
+    email: '',
+    company: '',
+    jobTitle: '',
+    phone: '',
     timezone: 'GMT',
     
     // Notification Settings
@@ -38,8 +41,50 @@ export const Settings: React.FC<SettingsProps> = ({ onNavigate }) => {
     darkMode: false,
   });
 
+  // Load user data from profile on mount
+  useEffect(() => {
+    if (profile && agency) {
+      const nameParts = profile.full_name?.split(' ') || ['', ''];
+      setSettings(prev => ({
+        ...prev,
+        firstName: nameParts[0] || '',
+        lastName: nameParts.slice(1).join(' ') || '',
+        email: profile.email || '',
+        jobTitle: agency.contact_name || '',
+        phone: agency.contact_phone || '',
+        company: agency.name || '',
+      }));
+    }
+  }, [profile, agency]);
+
   const handleSettingChange = (key: string, value: any) => {
     setSettings(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleSaveChanges = async () => {
+    setIsSaving(true);
+    try {
+      // Update profile in Supabase
+      const { error: profileError } = await updateProfile({
+        full_name: `${settings.firstName} ${settings.lastName}`.trim(),
+        email: settings.email,
+      });
+
+      if (profileError) {
+        alert(`Failed to save profile: ${profileError.message}`);
+        return;
+      }
+
+      // TODO: Update agency contact info
+      // Currently blocked by Supabase TypeScript issue
+      // Need to update: company name, job title, phone in agencies table
+      
+      alert('Personal information saved successfully!\n\nNote: Company information and phone updates coming soon.');
+    } catch (error: any) {
+      alert(`Failed to save settings: ${error.message}`);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const tabs = [
@@ -137,8 +182,12 @@ export const Settings: React.FC<SettingsProps> = ({ onNavigate }) => {
             </NeumorphCard>
 
             <div className="flex justify-end">
-              <NeumorphButton variant="primary">
-                Save Changes
+              <NeumorphButton 
+                variant="primary" 
+                onClick={handleSaveChanges}
+                disabled={isSaving}
+              >
+                {isSaving ? 'Saving...' : 'Save Changes'}
               </NeumorphButton>
             </div>
           </div>
