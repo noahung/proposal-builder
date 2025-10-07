@@ -89,7 +89,18 @@ export const ProposalPreview: React.FC<ProposalPreviewProps> = ({ proposalId }) 
             style={baseStyle}
             className="pointer-events-none"
           >
-            <h2 className="text-2xl font-bold">{element.content}</h2>
+            {element.content.level === 1 && (
+              <h1 className="text-3xl font-bold">{element.content.text || 'Heading'}</h1>
+            )}
+            {element.content.level === 2 && (
+              <h2 className="text-2xl font-bold">{element.content.text || 'Heading'}</h2>
+            )}
+            {element.content.level === 3 && (
+              <h3 className="text-xl font-bold">{element.content.text || 'Heading'}</h3>
+            )}
+            {!element.content.level && (
+              <h2 className="text-2xl font-bold">{element.content.text || 'Heading'}</h2>
+            )}
           </div>
         );
 

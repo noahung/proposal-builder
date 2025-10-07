@@ -30,6 +30,7 @@ import { ChartEditor } from '../editor/ChartEditor';
 import { TableEditor } from '../editor/TableEditor';
 import { TextEditor } from '../editor/TextEditor';
 import { ShapeEditor } from '../editor/ShapeEditor';
+import { HeadingEditor } from '../editor/HeadingEditor';
 
 interface ProposalEditorProps {
   proposalId: string;
@@ -145,7 +146,7 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
       });
       setLastSaved(new Date());
       alert('Proposal saved successfully!');
-      onSave();
+      // Don't navigate back - stay on editor
     } catch (error: any) {
       alert(`Failed to save proposal: ${error.message}`);
     } finally {
@@ -1045,6 +1046,8 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
         const handleClose = () => setEditingElement(null);
 
         switch (element.type) {
+          case 'heading':
+            return <HeadingEditor element={element} onUpdate={handleUpdate} onClose={handleClose} />;
           case 'image':
             return <ImageEditor element={element} onUpdate={handleUpdate} onClose={handleClose} />;
           case 'video':
