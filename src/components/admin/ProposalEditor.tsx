@@ -121,7 +121,7 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
 
   // Keyboard event handler for Delete key
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const handleKeyDown = async (e: KeyboardEvent) => {
       // Delete or Backspace key to delete selected element
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedElement) {
         // Don't delete if user is typing in an input or textarea
@@ -132,15 +132,31 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
         
         e.preventDefault();
         if (confirm('Delete this element?')) {
-          setElements(elements.filter(el => el.id !== selectedElement));
+          const updatedElements = elements.filter(el => el.id !== selectedElement);
+          setElements(updatedElements);
           setSelectedElement(null);
+          
+          // Immediately save to database after deletion
+          if (currentSectionId) {
+            try {
+              await updateSection.mutateAsync({
+                id: currentSectionId,
+                data: {
+                  elements: updatedElements,
+                },
+              });
+              setLastSaved(new Date());
+            } catch (error) {
+              console.error('Failed to save after delete:', error);
+            }
+          }
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedElement, elements]);
+  }, [selectedElement, elements, currentSectionId, updateSection]);
 
   // Loading and error states
   if (proposalLoading || sectionsLoading) {
@@ -192,7 +208,12 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
 
   // Add new section
   const handleAddSection = async () => {
-    const nextOrderIndex = sections ? sections.length : 0;
+    // Calculate the next order_index by finding the max existing order_index
+    const maxOrderIndex = sections && sections.length > 0
+      ? Math.max(...sections.map(s => s.order_index))
+      : -1;
+    const nextOrderIndex = maxOrderIndex + 1;
+    
     try {
       const result = await createSection.mutateAsync({
         proposal_id: proposalId,
@@ -216,11 +237,34 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
 
     try {
       await deleteSection.mutateAsync(sectionId);
+      
       // Switch to first available section
       if (sections && sections.length > 1) {
         const remainingSections = sections.filter(s => s.id !== sectionId);
         if (remainingSections.length > 0) {
           setCurrentSectionId(remainingSections[0].id);
+          
+          // Reorder remaining sections to avoid gaps in order_index
+          const reorderUpdates = remainingSections.map((section, index) => ({
+            id: section.id,
+            order_index: index,
+          }));
+          
+          // Update order indices in the background
+          if (reorderUpdates.length > 0) {
+            try {
+              await Promise.all(
+                reorderUpdates.map(({ id, order_index }) =>
+                  updateSection.mutateAsync({
+                    id,
+                    data: { order_index },
+                  })
+                )
+              );
+            } catch (reorderError) {
+              console.error('Failed to reorder sections:', reorderError);
+            }
+          }
         }
       }
     } catch (error: any) {
@@ -359,15 +403,31 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
           } ${element.locked ? 'cursor-not-allowed' : ''}`}
           onClick={() => setSelectedElement(element.id)}
           onDoubleClick={() => setEditingElement(element.id)}
-          onContextMenu={(e) => {
+          onContextMenu={async (e) => {
             e.preventDefault();
             setSelectedElement(element.id);
             
             // Show context menu options
             const shouldDelete = window.confirm('Delete this element?');
             if (shouldDelete) {
-              setElements(elements.filter(el => el.id !== element.id));
+              const updatedElements = elements.filter(el => el.id !== element.id);
+              setElements(updatedElements);
               setSelectedElement(null);
+              
+              // Immediately save to database after deletion
+              if (currentSectionId) {
+                try {
+                  await updateSection.mutateAsync({
+                    id: currentSectionId,
+                    data: {
+                      elements: updatedElements,
+                    },
+                  });
+                  setLastSaved(new Date());
+                } catch (error) {
+                  console.error('Failed to save after delete:', error);
+                }
+              }
             }
           }}
         >
@@ -887,10 +947,26 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
                 </NeumorphButton>
                 <NeumorphButton
                   size="sm"
-                  onClick={() => {
+                  onClick={async () => {
                     if (confirm('Delete this element?')) {
-                      setElements(elements.filter(el => el.id !== selectedElement));
+                      const updatedElements = elements.filter(el => el.id !== selectedElement);
+                      setElements(updatedElements);
                       setSelectedElement(null);
+                      
+                      // Immediately save to database after deletion
+                      if (currentSectionId) {
+                        try {
+                          await updateSection.mutateAsync({
+                            id: currentSectionId,
+                            data: {
+                              elements: updatedElements,
+                            },
+                          });
+                          setLastSaved(new Date());
+                        } catch (error) {
+                          console.error('Failed to save after delete:', error);
+                        }
+                      }
                     }
                   }}
                   title="Delete Element"
