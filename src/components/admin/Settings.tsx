@@ -47,7 +47,8 @@ export const Settings: React.FC<SettingsProps> = ({ onNavigate }) => {
     { id: 'notifications', label: 'Notifications', icon: '🔔' },
     { id: 'security', label: 'Security', icon: '🔒' },
     { id: 'preferences', label: 'Preferences', icon: '⚙️' },
-    { id: 'billing', label: 'Billing', icon: '💳' },
+    // Billing removed - internal use only
+    // { id: 'billing', label: 'Billing', icon: '💳' },
     { id: 'integrations', label: 'Integrations', icon: '🔗' },
   ];
 
@@ -163,7 +164,7 @@ export const Settings: React.FC<SettingsProps> = ({ onNavigate }) => {
                     </div>
                     <Switch
                       checked={settings[item.key as keyof typeof settings] as boolean}
-                      onCheckedChange={(checked) => handleSettingChange(item.key, checked)}
+                      onCheckedChange={(checked: boolean) => handleSettingChange(item.key, checked)}
                     />
                   </div>
                 ))}
@@ -207,7 +208,7 @@ export const Settings: React.FC<SettingsProps> = ({ onNavigate }) => {
                     </div>
                     <Switch
                       checked={settings.twoFactorAuth}
-                      onCheckedChange={(checked) => handleSettingChange('twoFactorAuth', checked)}
+                      onCheckedChange={(checked: boolean) => handleSettingChange('twoFactorAuth', checked)}
                     />
                   </div>
                 </div>
@@ -275,7 +276,7 @@ export const Settings: React.FC<SettingsProps> = ({ onNavigate }) => {
                     </div>
                     <Switch
                       checked={settings.autoSave}
-                      onCheckedChange={(checked) => handleSettingChange('autoSave', checked)}
+                      onCheckedChange={(checked: boolean) => handleSettingChange('autoSave', checked)}
                     />
                   </div>
 
@@ -286,7 +287,7 @@ export const Settings: React.FC<SettingsProps> = ({ onNavigate }) => {
                     </div>
                     <Switch
                       checked={settings.darkMode}
-                      onCheckedChange={(checked) => handleSettingChange('darkMode', checked)}
+                      onCheckedChange={(checked: boolean) => handleSettingChange('darkMode', checked)}
                       disabled
                     />
                   </div>
@@ -296,75 +297,9 @@ export const Settings: React.FC<SettingsProps> = ({ onNavigate }) => {
           </div>
         );
 
-      case 'billing':
-        return (
-          <div className="space-y-6">
-            <NeumorphCard>
-              <h3 className="mb-6">Current Plan</h3>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 neumorph-inset rounded-lg">
-                  <div>
-                    <div className="font-medium text-primary">Professional Plan</div>
-                    <div className="text-sm text-muted-foreground">Up to 100 proposals per month</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-medium">£49/month</div>
-                    <div className="text-sm text-muted-foreground">Billed monthly</div>
-                  </div>
-                </div>
-                
-                <div className="flex gap-3">
-                  <NeumorphButton variant="primary">
-                    Upgrade Plan
-                  </NeumorphButton>
-                  <NeumorphButton>
-                    Change to Annual
-                  </NeumorphButton>
-                </div>
-              </div>
-            </NeumorphCard>
-
-            <NeumorphCard>
-              <h3 className="mb-6">Payment Method</h3>
-              <div className="space-y-4">
-                <div className="flex items-center gap-4 p-4 neumorph-inset rounded-lg">
-                  <div className="w-12 h-8 bg-gradient-to-r from-blue-600 to-blue-400 rounded flex items-center justify-center">
-                    <span className="text-white text-xs font-medium">VISA</span>
-                  </div>
-                  <div className="flex-1">
-                    <div className="font-medium">•••• •••• •••• 4242</div>
-                    <div className="text-sm text-muted-foreground">Expires 12/25</div>
-                  </div>
-                  <NeumorphButton size="sm">
-                    Update
-                  </NeumorphButton>
-                </div>
-              </div>
-            </NeumorphCard>
-
-            <NeumorphCard>
-              <h3 className="mb-6">Billing History</h3>
-              <div className="space-y-2">
-                {[
-                  { date: '1 Nov 2024', amount: '£49.00', status: 'Paid' },
-                  { date: '1 Oct 2024', amount: '£49.00', status: 'Paid' },
-                  { date: '1 Sep 2024', amount: '£49.00', status: 'Paid' },
-                ].map((invoice, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 neumorph-inset rounded-lg">
-                    <div>
-                      <div className="font-medium">{invoice.date}</div>
-                      <div className="text-sm text-muted-foreground">Professional Plan</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-medium">{invoice.amount}</div>
-                      <div className="text-sm text-green-600">{invoice.status}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </NeumorphCard>
-          </div>
-        );
+      // Billing removed - internal use only, no payment processing needed
+      // case 'billing':
+      //   return (...billing content...);
 
       case 'integrations':
         return (

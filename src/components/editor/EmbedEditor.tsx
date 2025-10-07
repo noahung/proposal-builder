@@ -14,10 +14,21 @@ export const EmbedEditor: React.FC<EmbedEditorProps> = ({ element, onUpdate, onC
   const [embedCode, setEmbedCode] = useState(element.content.code || '');
   const [embedType, setEmbedType] = useState<'iframe' | 'code'>(element.content.embedType || 'iframe');
 
+  // Convert YouTube URLs to nocookie domain to avoid ad blocker issues
+  const convertToNoCookie = (code: string): string => {
+    // Replace youtube.com with youtube-nocookie.com
+    return code
+      .replace(/https?:\/\/(www\.)?youtube\.com\/embed\//gi, 'https://www.youtube-nocookie.com/embed/')
+      .replace(/https?:\/\/youtube\.com\/embed\//gi, 'https://www.youtube-nocookie.com/embed/');
+  };
+
   const handleSave = () => {
+    // Automatically convert YouTube embeds to nocookie version
+    const processedCode = embedType === 'iframe' ? convertToNoCookie(embedCode) : embedCode;
+    
     onUpdate({
       content: {
-        code: embedCode,
+        code: processedCode,
         embedType: embedType,
       },
     });
@@ -49,6 +60,8 @@ export const EmbedEditor: React.FC<EmbedEditorProps> = ({ element, onUpdate, onC
               />
               <p className="text-xs text-muted-foreground mt-1">
                 Paste your iframe embed code here (e.g., from YouTube, Google Maps, etc.)
+                <br />
+                <span className="text-primary font-medium">💡 Tip: YouTube URLs will be automatically converted to youtube-nocookie.com to avoid ad blocker issues</span>
               </p>
             </div>
 
