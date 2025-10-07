@@ -51,12 +51,31 @@ See [PROJECT_PLAN.md](./PROJECT_PLAN.md) for detailed roadmap.
 # 1. Install dependencies
 npm install
 
-# 2. Run development server
+# 2. Set up environment variables (REQUIRED)
+# Copy the example file
+cp .env.local.example .env.local
+
+# Then edit .env.local and add your Supabase credentials:
+# VITE_SUPABASE_URL=https://your-project.supabase.co
+# VITE_SUPABASE_ANON_KEY=your-anon-key-here
+
+# 3. Run development server
 npm run dev
 
-# 3. Open browser
+# 4. Open browser
 # Visit http://localhost:3000
 ```
+
+### ⚠️ Troubleshooting
+
+**Problem**: App stuck on loading screen  
+**Solution**: Make sure you've created `.env.local` with valid Supabase credentials. See [LOADING_BUG_FIX.md](./LOADING_BUG_FIX.md) for details.
+
+**Where to get Supabase credentials**:
+1. Go to [Supabase Dashboard](https://app.supabase.com)
+2. Select your project
+3. Navigate to Settings → API
+4. Copy your Project URL and anon/public key
 
 ### For Backend Setup (Phase 2)
 See [QUICK_START.md](./QUICK_START.md) for Supabase setup.
