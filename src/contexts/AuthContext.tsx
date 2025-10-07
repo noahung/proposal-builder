@@ -45,28 +45,59 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const fetchUserData = async (userId: string) => {
     try {
       // Fetch profile
-      const { data: profileData, error: profileError } = await supabase
+      const profileResponse = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
 
-      if (profileError) throw profileError;
+      if (profileResponse.error) {
+        console.error('Error fetching profile:', profileResponse.error);
+        // If profile doesn't exist, sign out to prevent infinite loop
+        if (profileResponse.error.code === 'PGRST116') {
+          console.warn('Profile not found, signing out...');
+          await supabase.auth.signOut();
+          setUser(null);
+          setProfile(null);
+          setAgency(null);
+          setSession(null);
+        }
+        return;
+      }
+      
+      const profileData = profileResponse.data;
+      
+      if (!profileData) {
+        console.warn('No profile data returned');
+        return;
+      }
+      
       setProfile(profileData);
 
       // Fetch agency if profile has agency_id
-      if (profileData?.agency_id) {
-        const { data: agencyData, error: agencyError } = await supabase
+      if (profileData.agency_id) {
+        const agencyResponse = await supabase
           .from('agencies')
           .select('*')
           .eq('id', profileData.agency_id)
           .single();
 
-        if (agencyError) throw agencyError;
-        setAgency(agencyData);
+        if (agencyResponse.error) {
+          console.error('Error fetching agency:', agencyResponse.error);
+          // Continue even if agency fetch fails
+          setAgency(null);
+          return;
+        }
+        
+        if (agencyResponse.data) {
+          setAgency(agencyResponse.data);
+        }
       }
     } catch (error) {
       console.error('Error fetching user data:', error);
+      // Reset state on critical error to prevent infinite loading
+      setProfile(null);
+      setAgency(null);
     }
   };
 
@@ -172,9 +203,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       if (!user) throw new Error('No user logged in');
 
+      // TypeScript workaround for Supabase type inference issue
       const { error } = await supabase
         .from('profiles')
-        .update(updates)
+        .update(updates as any)
         .eq('id', user.id);
 
       if (error) throw error;
