@@ -88,23 +88,6 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
   const currentSection = sections?.find(s => s.id === currentSectionId);
   const [elements, setElements] = useState<EditorElement[]>([]);
 
-  // Auto-save function (defined early to avoid hoisting issues)
-  const handleAutoSave = async () => {
-    if (!currentSectionId || !currentSection) return;
-
-    try {
-      await updateSection.mutateAsync({
-        id: currentSectionId,
-        data: {
-          elements: elements,
-        },
-      });
-      setLastSaved(new Date());
-    } catch (error) {
-      console.error('Auto-save failed:', error);
-    }
-  };
-
   // Load elements from current section
   useEffect(() => {
     if (currentSection && currentSection.elements) {
@@ -114,31 +97,9 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
     }
   }, [currentSection]);
 
-  // Auto-save functionality (every 30 seconds)
-  useEffect(() => {
-    if (!currentSectionId || !sections) return;
-
-    const autoSaveInterval = setInterval(() => {
-      handleAutoSave();
-    }, 30000); // 30 seconds
-
-    return () => clearInterval(autoSaveInterval);
-  }, [currentSectionId, sections, handleAutoSave]); // Add handleAutoSave to dependencies
-
-  // Debounced auto-save on element changes
-  useEffect(() => {
-    if (!currentSectionId || elements.length === 0) return;
-
-    const debounceTimer = setTimeout(() => {
-      handleAutoSave();
-    }, 2000); // 2 seconds after last change
-
-    return () => clearTimeout(debounceTimer);
-  }, [elements, currentSectionId, handleAutoSave]); // Add dependencies
-
   // Keyboard event handler for Delete key
   useEffect(() => {
-    const handleKeyDown = async (e: KeyboardEvent) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       // Delete or Backspace key to delete selected element
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedElement) {
         // Don't delete if user is typing in an input or textarea
@@ -149,31 +110,15 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
         
         e.preventDefault();
         if (confirm('Delete this element?')) {
-          const updatedElements = elements.filter(el => el.id !== selectedElement);
-          setElements(updatedElements);
+          setElements(elements.filter(el => el.id !== selectedElement));
           setSelectedElement(null);
-          
-          // Immediately save to database after deletion
-          if (currentSectionId) {
-            try {
-              await updateSection.mutateAsync({
-                id: currentSectionId,
-                data: {
-                  elements: updatedElements,
-                },
-              });
-              setLastSaved(new Date());
-            } catch (error) {
-              console.error('Failed to save after delete:', error);
-            }
-          }
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedElement, elements, currentSectionId, updateSection]);
+  }, [selectedElement, elements]);
 
   // Loading and error states
   if (proposalLoading || sectionsLoading) {
@@ -403,31 +348,15 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
           } ${element.locked ? 'cursor-not-allowed' : ''}`}
           onClick={() => setSelectedElement(element.id)}
           onDoubleClick={() => setEditingElement(element.id)}
-          onContextMenu={async (e) => {
+          onContextMenu={(e) => {
             e.preventDefault();
             setSelectedElement(element.id);
             
             // Show context menu options
             const shouldDelete = window.confirm('Delete this element?');
             if (shouldDelete) {
-              const updatedElements = elements.filter(el => el.id !== element.id);
-              setElements(updatedElements);
+              setElements(elements.filter(el => el.id !== element.id));
               setSelectedElement(null);
-              
-              // Immediately save to database after deletion
-              if (currentSectionId) {
-                try {
-                  await updateSection.mutateAsync({
-                    id: currentSectionId,
-                    data: {
-                      elements: updatedElements,
-                    },
-                  });
-                  setLastSaved(new Date());
-                } catch (error) {
-                  console.error('Failed to save after delete:', error);
-                }
-              }
             }
           }}
         >
@@ -947,26 +876,10 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
                 </NeumorphButton>
                 <NeumorphButton
                   size="sm"
-                  onClick={async () => {
+                  onClick={() => {
                     if (confirm('Delete this element?')) {
-                      const updatedElements = elements.filter(el => el.id !== selectedElement);
-                      setElements(updatedElements);
+                      setElements(elements.filter(el => el.id !== selectedElement));
                       setSelectedElement(null);
-                      
-                      // Immediately save to database after deletion
-                      if (currentSectionId) {
-                        try {
-                          await updateSection.mutateAsync({
-                            id: currentSectionId,
-                            data: {
-                              elements: updatedElements,
-                            },
-                          });
-                          setLastSaved(new Date());
-                        } catch (error) {
-                          console.error('Failed to save after delete:', error);
-                        }
-                      }
                     }
                   }}
                   title="Delete Element"
@@ -1048,7 +961,6 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
                   ) : (
                     <div
                       onClick={() => {
-                        handleAutoSave();
                         setCurrentSectionId(section.id);
                       }}
                       className="w-full text-left p-2 hover:bg-muted/20 rounded transition-colors cursor-pointer"
