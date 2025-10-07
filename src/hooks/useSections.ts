@@ -18,6 +18,10 @@ export const useSections = (proposalId: string) => {
       return data || [];
     },
     enabled: !!proposalId,
+    // Don't refetch on window focus to prevent duplicate key issues
+    refetchOnWindowFocus: false,
+    // Keep data in cache to prevent loading overlay from showing during mutations
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 };
 

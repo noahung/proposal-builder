@@ -121,7 +121,9 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
   }, [selectedElement, elements]);
 
   // Loading and error states
-  if (proposalLoading || sectionsLoading) {
+  // Only show loading screen on initial load, not during refetches
+  // This prevents the loading overlay from blocking content (like embeds) when mutations invalidate queries
+  if (proposalLoading || (sectionsLoading && !sections)) {
     return <LoadingScreen />;
   }
 
@@ -153,11 +155,20 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
 
   // Add new section
   const handleAddSection = async () => {
+    if (!sections) return;
+    
     // Calculate the next order_index by finding the max existing order_index
-    const maxOrderIndex = sections && sections.length > 0
+    const maxOrderIndex = sections.length > 0
       ? Math.max(...sections.map(s => s.order_index))
       : -1;
     const nextOrderIndex = maxOrderIndex + 1;
+    
+    console.log('Adding page:', {
+      sectionsCount: sections.length,
+      existingOrderIndexes: sections.map(s => s.order_index),
+      maxOrderIndex,
+      nextOrderIndex,
+    });
     
     try {
       const result = await createSection.mutateAsync({
@@ -167,11 +178,14 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
         elements: [],
       });
       
+      console.log('Page created successfully:', result.data);
+      
       // Set the newly created section as current
       if (result.data) {
         setCurrentSectionId(result.data.id);
       }
     } catch (error: any) {
+      console.error('Add page error:', error);
       alert(`Failed to create page: ${error.message}`);
     }
   };
