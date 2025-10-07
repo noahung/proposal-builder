@@ -88,6 +88,23 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
   const currentSection = sections?.find(s => s.id === currentSectionId);
   const [elements, setElements] = useState<EditorElement[]>([]);
 
+  // Auto-save function (defined early to avoid hoisting issues)
+  const handleAutoSave = async () => {
+    if (!currentSectionId || !currentSection) return;
+
+    try {
+      await updateSection.mutateAsync({
+        id: currentSectionId,
+        data: {
+          elements: elements,
+        },
+      });
+      setLastSaved(new Date());
+    } catch (error) {
+      console.error('Auto-save failed:', error);
+    }
+  };
+
   // Load elements from current section
   useEffect(() => {
     if (currentSection && currentSection.elements) {
@@ -106,7 +123,7 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
     }, 30000); // 30 seconds
 
     return () => clearInterval(autoSaveInterval);
-  }, [currentSectionId, sections]); // Don't add elements to avoid infinite loop
+  }, [currentSectionId, sections, handleAutoSave]); // Add handleAutoSave to dependencies
 
   // Debounced auto-save on element changes
   useEffect(() => {
@@ -117,7 +134,7 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
     }, 2000); // 2 seconds after last change
 
     return () => clearTimeout(debounceTimer);
-  }, [elements]);
+  }, [elements, currentSectionId, handleAutoSave]); // Add dependencies
 
   // Keyboard event handler for Delete key
   useEffect(() => {
@@ -166,23 +183,6 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
   if (proposalError || !proposal) {
     return <ErrorScreen message="Failed to load proposal" onRetry={() => window.location.reload()} />;
   }
-
-  // Auto-save function
-  const handleAutoSave = async () => {
-    if (!currentSectionId || !currentSection) return;
-
-    try {
-      await updateSection.mutateAsync({
-        id: currentSectionId,
-        data: {
-          elements: elements,
-        },
-      });
-      setLastSaved(new Date());
-    } catch (error) {
-      console.error('Auto-save failed:', error);
-    }
-  };
 
   // Manual save function
   const handleSave = async () => {
@@ -1046,12 +1046,12 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
                       />
                     </div>
                   ) : (
-                    <button
+                    <div
                       onClick={() => {
                         handleAutoSave();
                         setCurrentSectionId(section.id);
                       }}
-                      className="w-full text-left p-2 hover:bg-muted/20 rounded transition-colors"
+                      className="w-full text-left p-2 hover:bg-muted/20 rounded transition-colors cursor-pointer"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm truncate flex-1">{section.title}</span>
@@ -1079,7 +1079,7 @@ export const ProposalEditor: React.FC<ProposalEditorProps> = ({
                           </button>
                         </div>
                       </div>
-                    </button>
+                    </div>
                   )}
                 </div>
               ))}

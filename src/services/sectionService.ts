@@ -89,12 +89,14 @@ export class SectionService {
         .from('proposal_sections')
         .update(updateData)
         .eq('id', id)
-        .select()
-        .single();
+        .select();
 
       if (error) throw error;
+      
+      // Return first item or null if no items
+      const result = data && data.length > 0 ? data[0] : null;
 
-      return { data, error: null };
+      return { data: result, error: null };
     } catch (error: any) {
       return { data: null, error: handleSupabaseError(error) };
     }
